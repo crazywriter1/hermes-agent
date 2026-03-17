@@ -12,12 +12,10 @@ Hermes ships with a large built-in skill library copied into `~/.hermes/skills/`
 
 Apple/macOS-specific skills — iMessage, Reminders, Notes, FindMy, and macOS automation. These skills only load on macOS systems.
 
-| Skill | Description | Path |
-|-------|-------------|------|
-| `apple-notes` | Manage Apple Notes via the memo CLI on macOS (create, view, search, edit). | `apple/apple-notes` |
-| `apple-reminders` | Manage Apple Reminders via remindctl CLI (list, add, complete, delete). | `apple/apple-reminders` |
-| `findmy` | Track Apple devices and AirTags via FindMy.app on macOS using AppleScript and screen capture. | `apple/findmy` |
-| `imessage` | Send and receive iMessages/SMS via the imsg CLI on macOS. | `apple/imessage` |
+- `apple-notes` - Manage Apple Notes via the memo CLI on macOS.
+- `apple-reminders` - Manage Apple Reminders via remindctl CLI.
+- `findmy` - Track Apple devices and AirTags on macOS.
+- `imessage` - Send and receive iMessages/SMS on macOS.
 
 ## autonomous-ai-agents
 
