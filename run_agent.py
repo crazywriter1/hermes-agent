@@ -554,7 +554,10 @@ class AIAgent:
 
         if self.api_mode == "anthropic_messages":
             from agent.anthropic_adapter import build_anthropic_client, resolve_anthropic_token
-            effective_key = api_key or resolve_anthropic_token() or ""
+            # Alibaba/DashScope use their own API key; do not fall back to ANTHROPIC_TOKEN (Fixes #1739 401).
+            _base = (base_url or "").lower()
+            _is_alibaba_dashscope = (self.provider == "alibaba") or ("dashscope" in _base) or ("aliyuncs" in _base)
+            effective_key = (api_key or "") if _is_alibaba_dashscope else (api_key or resolve_anthropic_token() or "")
             self._anthropic_api_key = effective_key
             self._anthropic_base_url = base_url
             from agent.anthropic_adapter import _is_oauth_token as _is_oat
@@ -2923,6 +2926,10 @@ class AIAgent:
 
     def _try_refresh_anthropic_client_credentials(self) -> bool:
         if self.api_mode != "anthropic_messages" or not hasattr(self, "_anthropic_api_key"):
+            return False
+        # Alibaba/DashScope use their own API key; do not refresh from ANTHROPIC_TOKEN (Fixes #1739 401).
+        _base = (getattr(self, "_anthropic_base_url", None) or "").lower()
+        if (self.provider == "alibaba") or ("dashscope" in _base) or ("aliyuncs" in _base):
             return False
 
         try:
