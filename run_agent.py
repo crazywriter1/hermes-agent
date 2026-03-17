@@ -106,6 +106,10 @@ HONCHO_TOOL_NAMES = {
     "honcho_conclude",
 }
 
+# Preserve the last known tool surface for compatibility with interrupt and
+# Honcho-related state restoration paths.
+_saved_tool_names: set[str] = set()
+
 
 class _SafeWriter:
     """Transparent stdio wrapper that catches OSError from broken pipes.
@@ -646,6 +650,8 @@ class AIAgent:
         self.valid_tool_names = set()
         if self.tools:
             self.valid_tool_names = {tool["function"]["name"] for tool in self.tools}
+            self._saved_tool_names = set(self.valid_tool_names)
+            globals()["_saved_tool_names"] = set(self.valid_tool_names)
             tool_names = sorted(self.valid_tool_names)
             if not self.quiet_mode:
                 print(f"🛠️  Loaded {len(self.tools)} tools: {', '.join(tool_names)}")
@@ -1619,6 +1625,11 @@ class AIAgent:
             self.valid_tool_names = set()
             return
 
+        # Keep the previous tool surface available for any restore path that
+        # needs the original names after Honcho-specific filtering.
+        self._saved_tool_names = set(getattr(self, "valid_tool_names", set()))
+        globals()["_saved_tool_names"] = set(self._saved_tool_names)
+
         self.tools = [
             tool for tool in self.tools
             if tool.get("function", {}).get("name") not in HONCHO_TOOL_NAMES
@@ -1626,6 +1637,8 @@ class AIAgent:
         self.valid_tool_names = {
             tool["function"]["name"] for tool in self.tools
         } if self.tools else set()
+        self._saved_tool_names = set(self.valid_tool_names)
+        globals()["_saved_tool_names"] = set(self.valid_tool_names)
 
     def _activate_honcho(
         self,

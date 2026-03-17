@@ -41,6 +41,17 @@ class TestPlatformConfigRoundtrip:
         assert restored.home_channel.chat_id == "555"
         assert restored.extra == {"foo": "bar"}
 
+    def test_from_dict_preserves_unknown_fields_in_extra(self):
+        restored = PlatformConfig.from_dict(
+            {
+                "enabled": True,
+                "reply_prefix": "Custom Bot",
+            }
+        )
+
+        assert restored.enabled is True
+        assert restored.extra["reply_prefix"] == "Custom Bot"
+
     def test_disabled_no_token(self):
         pc = PlatformConfig()
         d = pc.to_dict()

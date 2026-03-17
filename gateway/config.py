@@ -140,13 +140,21 @@ class PlatformConfig:
         home_channel = None
         if "home_channel" in data:
             home_channel = HomeChannel.from_dict(data["home_channel"])
+
+        known_keys = {"enabled", "token", "api_key", "home_channel", "extra"}
+        extra = {}
+        if isinstance(data.get("extra"), dict):
+            extra.update(data["extra"])
+        for key, value in data.items():
+            if key not in known_keys:
+                extra[key] = value
         
         return cls(
             enabled=data.get("enabled", False),
             token=data.get("token"),
             api_key=data.get("api_key"),
             home_channel=home_channel,
-            extra=data.get("extra", {}),
+            extra=extra,
         )
 
 
