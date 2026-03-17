@@ -14,6 +14,8 @@ All variables go in `~/.hermes/.env`. You can also set them with `hermes config 
 |----------|-------------|
 | `OPENROUTER_API_KEY` | OpenRouter API key (recommended for flexibility) |
 | `OPENROUTER_BASE_URL` | Override the OpenRouter-compatible base URL |
+| `AI_GATEWAY_API_KEY` | Vercel AI Gateway API key ([ai-gateway.vercel.sh](https://ai-gateway.vercel.sh)) |
+| `AI_GATEWAY_BASE_URL` | Override AI Gateway base URL (default: `https://ai-gateway.vercel.sh/v1`) |
 | `OPENAI_API_KEY` | API key for custom OpenAI-compatible endpoints (used with `OPENAI_BASE_URL`) |
 | `OPENAI_BASE_URL` | Base URL for custom endpoint (VLLM, SGLang, etc.) |
 | `GLM_API_KEY` | z.ai / ZhipuAI GLM API key ([z.ai](https://z.ai)) |
@@ -26,8 +28,11 @@ All variables go in `~/.hermes/.env`. You can also set them with `hermes config 
 | `MINIMAX_BASE_URL` | Override MiniMax base URL (default: `https://api.minimax.io/v1`) |
 | `MINIMAX_CN_API_KEY` | MiniMax API key — China endpoint ([minimaxi.com](https://www.minimaxi.com)) |
 | `MINIMAX_CN_BASE_URL` | Override MiniMax China base URL (default: `https://api.minimaxi.com/v1`) |
+| `KILOCODE_API_KEY` | Kilo Code API key ([kilo.ai](https://kilo.ai)) |
+| `KILOCODE_BASE_URL` | Override Kilo Code base URL (default: `https://api.kilo.ai/api/gateway`) |
 | `ANTHROPIC_API_KEY` | Anthropic Console API key ([console.anthropic.com](https://console.anthropic.com/)) |
 | `ANTHROPIC_TOKEN` | Manual or legacy Anthropic OAuth/setup-token override |
+| `DASHSCOPE_API_KEY` | Alibaba Cloud DashScope API key for Qwen models via Anthropic-compatible API ([modelstudio.console.alibabacloud.com](https://modelstudio.console.alibabacloud.com/)) |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Explicit Claude Code token override if you export one manually |
 | `HERMES_MODEL` | Preferred model name (checked before `LLM_MODEL`, used by gateway) |
 | `LLM_MODEL` | Default model name (fallback when not set in config.yaml) |
@@ -42,7 +47,7 @@ For native Anthropic auth, Hermes prefers Claude Code's own credential files whe
 
 | Variable | Description |
 |----------|-------------|
-| `HERMES_INFERENCE_PROVIDER` | Override provider selection: `auto`, `openrouter`, `nous`, `openai-codex`, `anthropic`, `zai`, `kimi-coding`, `minimax`, `minimax-cn` (default: `auto`) |
+| `HERMES_INFERENCE_PROVIDER` | Override provider selection: `auto`, `openrouter`, `nous`, `openai-codex`, `anthropic`, `zai`, `kimi-coding`, `minimax`, `minimax-cn`, `kilocode`, `alibaba` (default: `auto`) |
 | `HERMES_PORTAL_BASE_URL` | Override Nous Portal URL (for development/testing) |
 | `NOUS_INFERENCE_BASE_URL` | Override Nous inference API URL |
 | `HERMES_NOUS_MIN_KEY_TTL_SECONDS` | Min agent key TTL before re-mint (default: 1800 = 30min) |
@@ -78,6 +83,7 @@ For native Anthropic auth, Hermes prefers Claude Code's own credential files whe
 |----------|-------------|
 | `TERMINAL_ENV` | Backend: `local`, `docker`, `ssh`, `singularity`, `modal`, `daytona` |
 | `TERMINAL_DOCKER_IMAGE` | Docker image (default: `python:3.11`) |
+| `TERMINAL_DOCKER_FORWARD_ENV` | JSON array of env var names to explicitly forward into Docker terminal sessions |
 | `TERMINAL_DOCKER_VOLUMES` | Additional Docker volume mounts (comma-separated `host:container` pairs) |
 | `TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE` | Advanced opt-in: mount the launch cwd into Docker `/workspace` (`true`/`false`, default: `false`) |
 | `TERMINAL_SINGULARITY_IMAGE` | Singularity image or `.sif` path |
@@ -146,6 +152,14 @@ For native Anthropic auth, Hermes prefers Claude Code's own credential files whe
 | `SIGNAL_HOME_CHANNEL_NAME` | Display name for the Signal home channel |
 | `SIGNAL_IGNORE_STORIES` | Ignore Signal stories/status updates |
 | `SIGNAL_ALLOW_ALL_USERS` | Allow all Signal users without an allowlist |
+| `TWILIO_ACCOUNT_SID` | Twilio Account SID (shared with telephony skill) |
+| `TWILIO_AUTH_TOKEN` | Twilio Auth Token (shared with telephony skill) |
+| `TWILIO_PHONE_NUMBER` | Twilio phone number in E.164 format (shared with telephony skill) |
+| `SMS_WEBHOOK_PORT` | Webhook listener port for inbound SMS (default: `8080`) |
+| `SMS_ALLOWED_USERS` | Comma-separated E.164 phone numbers allowed to chat |
+| `SMS_ALLOW_ALL_USERS` | Allow all SMS senders without an allowlist |
+| `SMS_HOME_CHANNEL` | Phone number for cron job / notification delivery |
+| `SMS_HOME_CHANNEL_NAME` | Display name for the SMS home channel |
 | `EMAIL_ADDRESS` | Email address for the Email gateway adapter |
 | `EMAIL_PASSWORD` | Password or app password for the email account |
 | `EMAIL_IMAP_HOST` | IMAP hostname for the email adapter |
@@ -157,6 +171,8 @@ For native Anthropic auth, Hermes prefers Claude Code's own credential files whe
 | `EMAIL_HOME_ADDRESS_NAME` | Display name for the email home target |
 | `EMAIL_POLL_INTERVAL` | Email polling interval in seconds |
 | `EMAIL_ALLOW_ALL_USERS` | Allow all inbound email senders |
+| `DINGTALK_CLIENT_ID` | DingTalk bot AppKey from developer portal ([open.dingtalk.com](https://open.dingtalk.com)) |
+| `DINGTALK_CLIENT_SECRET` | DingTalk bot AppSecret from developer portal |
 | `HASS_TOKEN` | Home Assistant Long-Lived Access Token (enables HA platform + tools) |
 | `HASS_URL` | Home Assistant URL (default: `http://homeassistant.local:8123`) |
 | `MESSAGING_CWD` | Working directory for terminal commands in messaging mode (default: `~`) |

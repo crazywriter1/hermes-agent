@@ -110,6 +110,7 @@ PLATFORMS = {
     "whatsapp": {"label": "📱 WhatsApp",   "default_toolset": "hermes-whatsapp"},
     "signal":   {"label": "📡 Signal",     "default_toolset": "hermes-signal"},
     "email":    {"label": "📧 Email",      "default_toolset": "hermes-email"},
+    "dingtalk": {"label": "💬 DingTalk",   "default_toolset": "hermes-dingtalk"},
 }
 
 
@@ -190,6 +191,7 @@ TOOL_CATEGORIES = {
                 "name": "Local Browser",
                 "tag": "Free headless Chromium (no API key needed)",
                 "env_vars": [],
+                "browser_provider": None,
                 "post_setup": "browserbase",  # Same npm install for agent-browser
             },
             {
@@ -199,6 +201,16 @@ TOOL_CATEGORIES = {
                     {"key": "BROWSERBASE_API_KEY", "prompt": "Browserbase API key", "url": "https://browserbase.com"},
                     {"key": "BROWSERBASE_PROJECT_ID", "prompt": "Browserbase project ID"},
                 ],
+                "browser_provider": "browserbase",
+                "post_setup": "browserbase",
+            },
+            {
+                "name": "Browser Use",
+                "tag": "Cloud browser with remote execution",
+                "env_vars": [
+                    {"key": "BROWSER_USE_API_KEY", "prompt": "Browser Use API key", "url": "https://browser-use.com"},
+                ],
+                "browser_provider": "browser-use",
                 "post_setup": "browserbase",
             },
         ],
@@ -575,10 +587,10 @@ def _configure_tool_category(ts_key: str, cat: dict, config: dict):
             configured = ""
             env_vars = p.get("env_vars", [])
             if not env_vars or all(get_env_value(v["key"]) for v in env_vars):
-                if p.get("tts_provider") and config.get("tts", {}).get("provider") == p["tts_provider"]:
+                if _is_provider_active(p, config):
                     configured = " [active]"
                 elif not env_vars:
-                    configured = " [active]" if config.get("tts", {}).get("provider", "edge") == p.get("tts_provider", "") else ""
+                    configured = ""
                 else:
                     configured = " [configured]"
             provider_choices.append(f"{p['name']}{tag}{configured}")
@@ -587,15 +599,7 @@ def _configure_tool_category(ts_key: str, cat: dict, config: dict):
         provider_choices.append("Skip — keep defaults / configure later")
 
         # Detect current provider as default
-        default_idx = 0
-        for i, p in enumerate(providers):
-            if p.get("tts_provider") and config.get("tts", {}).get("provider") == p["tts_provider"]:
-                default_idx = i
-                break
-            env_vars = p.get("env_vars", [])
-            if env_vars and all(get_env_value(v["key"]) for v in env_vars):
-                default_idx = i
-                break
+        default_idx = _detect_active_provider_index(providers, config)
 
         provider_idx = _prompt_choice(f"  {title}:", provider_choices, default_idx)
 
@@ -607,6 +611,28 @@ def _configure_tool_category(ts_key: str, cat: dict, config: dict):
         _configure_provider(providers[provider_idx], config)
 
 
+def _is_provider_active(provider: dict, config: dict) -> bool:
+    """Check if a provider entry matches the currently active config."""
+    if provider.get("tts_provider"):
+        return config.get("tts", {}).get("provider") == provider["tts_provider"]
+    if "browser_provider" in provider:
+        current = config.get("browser", {}).get("cloud_provider")
+        return provider["browser_provider"] == current
+    return False
+
+
+def _detect_active_provider_index(providers: list, config: dict) -> int:
+    """Return the index of the currently active provider, or 0."""
+    for i, p in enumerate(providers):
+        if _is_provider_active(p, config):
+            return i
+        # Fallback: env vars present → likely configured
+        env_vars = p.get("env_vars", [])
+        if env_vars and all(get_env_value(v["key"]) for v in env_vars):
+            return i
+    return 0
+
+
 def _configure_provider(provider: dict, config: dict):
     """Configure a single provider - prompt for API keys and set config."""
     env_vars = provider.get("env_vars", [])
@@ -614,6 +640,15 @@ def _configure_provider(provider: dict, config: dict):
     # Set TTS provider in config if applicable
     if provider.get("tts_provider"):
         config.setdefault("tts", {})["provider"] = provider["tts_provider"]
+
+    # Set browser cloud provider in config if applicable
+    if "browser_provider" in provider:
+        bp = provider["browser_provider"]
+        if bp:
+            config.setdefault("browser", {})["cloud_provider"] = bp
+            _print_success(f"  Browser cloud provider set to: {bp}")
+        else:
+            config.get("browser", {}).pop("cloud_provider", None)
 
     if not env_vars:
         _print_success(f"  {provider['name']} - no configuration needed!")
@@ -767,7 +802,7 @@ def _configure_tool_category_for_reconfig(ts_key: str, cat: dict, config: dict):
             configured = ""
             env_vars = p.get("env_vars", [])
             if not env_vars or all(get_env_value(v["key"]) for v in env_vars):
-                if p.get("tts_provider") and config.get("tts", {}).get("provider") == p["tts_provider"]:
+                if _is_provider_active(p, config):
                     configured = " [active]"
                 elif not env_vars:
                     configured = ""
@@ -775,15 +810,7 @@ def _configure_tool_category_for_reconfig(ts_key: str, cat: dict, config: dict):
                     configured = " [configured]"
             provider_choices.append(f"{p['name']}{tag}{configured}")
 
-        default_idx = 0
-        for i, p in enumerate(providers):
-            if p.get("tts_provider") and config.get("tts", {}).get("provider") == p["tts_provider"]:
-                default_idx = i
-                break
-            env_vars = p.get("env_vars", [])
-            if env_vars and all(get_env_value(v["key"]) for v in env_vars):
-                default_idx = i
-                break
+        default_idx = _detect_active_provider_index(providers, config)
 
         provider_idx = _prompt_choice("  Select provider:", provider_choices, default_idx)
         _reconfigure_provider(providers[provider_idx], config)
@@ -796,6 +823,15 @@ def _reconfigure_provider(provider: dict, config: dict):
     if provider.get("tts_provider"):
         config.setdefault("tts", {})["provider"] = provider["tts_provider"]
         _print_success(f"  TTS provider set to: {provider['tts_provider']}")
+
+    if "browser_provider" in provider:
+        bp = provider["browser_provider"]
+        if bp:
+            config.setdefault("browser", {})["cloud_provider"] = bp
+            _print_success(f"  Browser cloud provider set to: {bp}")
+        else:
+            config.get("browser", {}).pop("cloud_provider", None)
+            _print_success(f"  Browser set to local mode")
 
     if not env_vars:
         _print_success(f"  {provider['name']} - no configuration needed!")
@@ -1053,3 +1089,114 @@ def tools_command(args=None, first_install: bool = False, config: dict = None):
     print(color("  Tool configuration saved to ~/.hermes/config.yaml", Colors.DIM))
     print(color("  Changes take effect on next 'hermes' or gateway restart.", Colors.DIM))
     print()
+
+
+# ─── Non-interactive disable/enable ──────────────────────────────────────────
+
+
+def _apply_toolset_change(config: dict, platform: str, toolset_names: List[str], action: str):
+    """Add or remove built-in toolsets for a platform."""
+    enabled = _get_platform_tools(config, platform)
+    if action == "disable":
+        updated = enabled - set(toolset_names)
+    else:
+        updated = enabled | set(toolset_names)
+    _save_platform_tools(config, platform, updated)
+
+
+def _apply_mcp_change(config: dict, targets: List[str], action: str) -> Set[str]:
+    """Add or remove specific MCP tools from a server's exclude list.
+
+    Returns the set of server names that were not found in config.
+    """
+    failed_servers: Set[str] = set()
+    mcp_servers = config.get("mcp_servers") or {}
+
+    for target in targets:
+        server_name, tool_name = target.split(":", 1)
+        if server_name not in mcp_servers:
+            failed_servers.add(server_name)
+            continue
+        tools_cfg = mcp_servers[server_name].setdefault("tools", {})
+        exclude = list(tools_cfg.get("exclude") or [])
+        if action == "disable":
+            if tool_name not in exclude:
+                exclude.append(tool_name)
+        else:
+            exclude = [t for t in exclude if t != tool_name]
+        tools_cfg["exclude"] = exclude
+
+    return failed_servers
+
+
+def _print_tools_list(enabled_toolsets: set, mcp_servers: dict, platform: str = "cli"):
+    """Print a summary of enabled/disabled toolsets and MCP tool filters."""
+    print(f"Built-in toolsets ({platform}):")
+    for ts_key, label, _ in CONFIGURABLE_TOOLSETS:
+        status = (color("✓ enabled", Colors.GREEN) if ts_key in enabled_toolsets
+                  else color("✗ disabled", Colors.RED))
+        print(f"  {status}  {ts_key}  {color(label, Colors.DIM)}")
+
+    if mcp_servers:
+        print()
+        print("MCP servers:")
+        for srv_name, srv_cfg in mcp_servers.items():
+            tools_cfg = srv_cfg.get("tools") or {}
+            exclude = tools_cfg.get("exclude") or []
+            include = tools_cfg.get("include") or []
+            if include:
+                _print_info(f"{srv_name}  [include only: {', '.join(include)}]")
+            elif exclude:
+                _print_info(f"{srv_name}  [excluded: {color(', '.join(exclude), Colors.YELLOW)}]")
+            else:
+                _print_info(f"{srv_name}  {color('all tools enabled', Colors.DIM)}")
+
+
+def tools_disable_enable_command(args):
+    """Enable, disable, or list tools for a platform.
+
+    Built-in toolsets use plain names (e.g. ``web``, ``memory``).
+    MCP tools use ``server:tool`` notation (e.g. ``github:create_issue``).
+    """
+    action = args.tools_action
+    platform = getattr(args, "platform", "cli")
+    config = load_config()
+
+    if platform not in PLATFORMS:
+        _print_error(f"Unknown platform '{platform}'. Valid: {', '.join(PLATFORMS)}")
+        return
+
+    if action == "list":
+        _print_tools_list(_get_platform_tools(config, platform),
+                          config.get("mcp_servers") or {}, platform)
+        return
+
+    targets: List[str] = args.names
+    toolset_targets = [t for t in targets if ":" not in t]
+    mcp_targets = [t for t in targets if ":" in t]
+
+    valid_toolsets = {ts_key for ts_key, _, _ in CONFIGURABLE_TOOLSETS}
+    unknown_toolsets = [t for t in toolset_targets if t not in valid_toolsets]
+    if unknown_toolsets:
+        for name in unknown_toolsets:
+            _print_error(f"Unknown toolset '{name}'")
+        toolset_targets = [t for t in toolset_targets if t in valid_toolsets]
+
+    if toolset_targets:
+        _apply_toolset_change(config, platform, toolset_targets, action)
+
+    failed_servers: Set[str] = set()
+    if mcp_targets:
+        failed_servers = _apply_mcp_change(config, mcp_targets, action)
+        for srv in failed_servers:
+            _print_error(f"MCP server '{srv}' not found in config")
+
+    save_config(config)
+
+    successful = [
+        t for t in targets
+        if t not in unknown_toolsets and (":" not in t or t.split(":")[0] not in failed_servers)
+    ]
+    if successful:
+        verb = "Disabled" if action == "disable" else "Enabled"
+        _print_success(f"{verb}: {', '.join(successful)}")

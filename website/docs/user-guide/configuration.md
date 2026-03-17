@@ -65,10 +65,13 @@ You need at least one way to connect to an LLM. Use `hermes model` to switch pro
 | **OpenAI Codex** | `hermes model` (ChatGPT OAuth, uses Codex models) |
 | **Anthropic** | `hermes model` (Claude Pro/Max via Claude Code auth, Anthropic API key, or manual setup-token) |
 | **OpenRouter** | `OPENROUTER_API_KEY` in `~/.hermes/.env` |
+| **AI Gateway** | `AI_GATEWAY_API_KEY` in `~/.hermes/.env` (provider: `ai-gateway`) |
 | **z.ai / GLM** | `GLM_API_KEY` in `~/.hermes/.env` (provider: `zai`) |
 | **Kimi / Moonshot** | `KIMI_API_KEY` in `~/.hermes/.env` (provider: `kimi-coding`) |
 | **MiniMax** | `MINIMAX_API_KEY` in `~/.hermes/.env` (provider: `minimax`) |
 | **MiniMax China** | `MINIMAX_CN_API_KEY` in `~/.hermes/.env` (provider: `minimax-cn`) |
+| **Alibaba Cloud** | `DASHSCOPE_API_KEY` in `~/.hermes/.env` (provider: `alibaba`, aliases: `dashscope`, `qwen`) |
+| **Kilo Code** | `KILOCODE_API_KEY` in `~/.hermes/.env` (provider: `kilocode`) |
 | **Custom Endpoint** | `hermes model` (saved in `config.yaml`) or `OPENAI_BASE_URL` + `OPENAI_API_KEY` in `~/.hermes/.env` |
 
 :::info Codex Note
@@ -372,7 +375,7 @@ You can switch between providers at any time with `hermes model` — no restart 
 
 | Feature | Provider | Env Variable |
 |---------|----------|--------------|
-| Web scraping | [Firecrawl](https://firecrawl.dev/) | `FIRECRAWL_API_KEY` |
+| Web scraping | [Firecrawl](https://firecrawl.dev/) | `FIRECRAWL_API_KEY`, `FIRECRAWL_API_URL` |
 | Browser automation | [Browserbase](https://browserbase.com/) | `BROWSERBASE_API_KEY`, `BROWSERBASE_PROJECT_ID` |
 | Image generation | [FAL](https://fal.ai/) | `FAL_KEY` |
 | Premium TTS voices | [ElevenLabs](https://elevenlabs.io/) | `ELEVENLABS_API_KEY` |
@@ -382,7 +385,7 @@ You can switch between providers at any time with `hermes model` — no restart 
 
 ### Self-Hosting Firecrawl
 
-By default, Hermes uses the [Firecrawl cloud API](https://firecrawl.dev/) for web search and scraping. If you prefer to run Firecrawl locally, you can point Hermes at a self-hosted instance instead.
+By default, Hermes uses the [Firecrawl cloud API](https://firecrawl.dev/) for web search and scraping. If you prefer to run Firecrawl locally, you can point Hermes at a self-hosted instance instead. See Firecrawl's [SELF_HOST.md](https://github.com/firecrawl/firecrawl/blob/main/SELF_HOST.md) for complete setup instructions.
 
 **What you get:** No API key required, no rate limits, no per-page costs, full data sovereignty.
 
@@ -392,9 +395,9 @@ By default, Hermes uses the [Firecrawl cloud API](https://firecrawl.dev/) for we
 
 1. Clone and start the Firecrawl Docker stack (5 containers: API, Playwright, Redis, RabbitMQ, PostgreSQL — requires ~4-8 GB RAM):
    ```bash
-   git clone https://github.com/mendableai/firecrawl
+   git clone https://github.com/firecrawl/firecrawl
    cd firecrawl
-   # In .env, set: USE_DB_AUTHENTICATION=false
+   # In .env, set: USE_DB_AUTHENTICATION=false, HOST=0.0.0.0, PORT=3002
    docker compose up -d
    ```
 
@@ -441,6 +444,39 @@ Supported providers: `openrouter`, `nous`, `openai-codex`, `anthropic`, `zai`, `
 Fallback is configured exclusively through `config.yaml` — there are no environment variables for it. For full details on when it triggers, supported providers, and how it interacts with auxiliary tasks and delegation, see [Fallback Providers](/docs/user-guide/features/fallback-providers).
 :::
 
+## Smart Model Routing
+
+Optional cheap-vs-strong routing lets Hermes keep your main model for complex work while sending very short/simple turns to a cheaper model.
+
+```yaml
+smart_model_routing:
+  enabled: true
+  max_simple_chars: 160
+  max_simple_words: 28
+  cheap_model:
+    provider: openrouter
+    model: google/gemini-2.5-flash
+    # base_url: http://localhost:8000/v1  # optional custom endpoint
+    # api_key_env: MY_CUSTOM_KEY          # optional env var name for that endpoint's API key
+```
+
+How it works:
+- If a turn is short, single-line, and does not look code/tool/debug heavy, Hermes may route it to `cheap_model`
+- If the turn looks complex, Hermes stays on your primary model/provider
+- If the cheap route cannot be resolved cleanly, Hermes falls back to the primary model automatically
+
+This is intentionally conservative. It is meant for quick, low-stakes turns like:
+- short factual questions
+- quick rewrites
+- lightweight summaries
+
+It will avoid routing prompts that look like:
+- coding/debugging work
+- tool-heavy requests
+- long or multi-line analysis asks
+
+Use this when you want lower latency or cost without fully changing your default model.
+
 ## Terminal Backend Configuration
 
 Configure which environment the agent uses for terminal commands:
@@ -454,6 +490,8 @@ terminal:
   # Docker-specific settings
   docker_image: "nikolaik/python-nodejs:python3.11-nodejs20"
   docker_mount_cwd_to_workspace: false  # SECURITY: off by default. Opt in to mount the launch cwd into /workspace.
+  docker_forward_env:              # Optional explicit allowlist for env passthrough
+    - "GITHUB_TOKEN"
   docker_volumes:                    # Additional explicit host mounts
     - "/home/user/projects:/workspace/projects"
     - "/home/user/data:/data:ro"     # :ro for read-only
@@ -520,6 +558,24 @@ This is useful for:
 - **Shared workspaces** where both you and the agent access the same files
 
 Can also be set via environment variable: `TERMINAL_DOCKER_VOLUMES='["/host:/container"]'` (JSON array).
+
+### Docker Credential Forwarding
+
+By default, Docker terminal sessions do not inherit arbitrary host credentials. If you need a specific token inside the container, add it to `terminal.docker_forward_env`.
+
+```yaml
+terminal:
+  backend: docker
+  docker_forward_env:
+    - "GITHUB_TOKEN"
+    - "NPM_TOKEN"
+```
+
+Hermes resolves each listed variable from your current shell first, then falls back to `~/.hermes/.env` if it was saved with `hermes config set`.
+
+:::warning
+Anything listed in `docker_forward_env` becomes visible to commands run inside the container. Only forward credentials you are comfortable exposing to the terminal session.
+:::
 
 ### Optional: Mount the Launch Directory into `/workspace`
 
@@ -822,6 +878,7 @@ display:
   resume_display: full    # full (show previous messages on resume) | minimal (one-liner only)
   bell_on_complete: false # Play terminal bell when agent finishes (great for long tasks)
   show_reasoning: false   # Show model reasoning/thinking above each response (toggle with /reasoning show|hide)
+  streaming: false        # Stream tokens to terminal as they arrive (real-time output)
   background_process_notifications: all  # all | result | error | off (gateway only)
 ```
 
@@ -894,6 +951,36 @@ voice:
 ```
 
 Use `/voice on` in the CLI to enable microphone mode, `record_key` to start/stop recording, and `/voice tts` to toggle spoken replies. See [Voice Mode](/docs/user-guide/features/voice-mode) for end-to-end setup and platform-specific behavior.
+
+## Streaming
+
+Stream tokens to the terminal or messaging platforms as they arrive, instead of waiting for the full response.
+
+### CLI Streaming
+
+```yaml
+display:
+  streaming: true         # Stream tokens to terminal in real-time
+  show_reasoning: true    # Also stream reasoning/thinking tokens (optional)
+```
+
+When enabled, responses appear token-by-token inside a streaming box. Tool calls are still captured silently. If the provider doesn't support streaming, it falls back to the normal display automatically.
+
+### Gateway Streaming (Telegram, Discord, Slack)
+
+```yaml
+streaming:
+  enabled: true           # Enable progressive message editing
+  edit_interval: 0.3      # Seconds between message edits
+  buffer_threshold: 40    # Characters before forcing an edit flush
+  cursor: " ▉"            # Cursor shown during streaming
+```
+
+When enabled, the bot sends a message on the first token, then progressively edits it as more tokens arrive. Platforms that don't support message editing (Signal, Email) gracefully skip streaming and deliver the final response normally.
+
+:::note
+Streaming is disabled by default. Enable it in `~/.hermes/config.yaml` to try the streaming UX.
+:::
 
 ## Group Chat Session Isolation
 
