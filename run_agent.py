@@ -3521,6 +3521,13 @@ class AIAgent:
             )
         return transformed
 
+    def _anthropic_preserve_dots(self) -> bool:
+        """True when using Alibaba/DashScope anthropic-compatible endpoint (model names keep dots, e.g. qwen3.5-plus)."""
+        if (getattr(self, "provider", "") or "").lower() == "alibaba":
+            return True
+        base = (getattr(self, "base_url", "") or "").lower()
+        return "dashscope" in base or "aliyuncs" in base
+
     def _build_api_kwargs(self, api_messages: list) -> dict:
         """Build the keyword arguments dict for the active API mode."""
         if self.api_mode == "anthropic_messages":
@@ -3533,6 +3540,7 @@ class AIAgent:
                 max_tokens=self.max_tokens,
                 reasoning_config=self.reasoning_config,
                 is_oauth=getattr(self, "_is_anthropic_oauth", False),
+                preserve_dots=self._anthropic_preserve_dots(),
             )
 
         if self.api_mode == "codex_responses":
@@ -3932,6 +3940,7 @@ class AIAgent:
                     model=self.model, messages=api_messages,
                     tools=[memory_tool_def], max_tokens=5120,
                     reasoning_config=None,
+                    preserve_dots=self._anthropic_preserve_dots(),
                 )
                 response = self._anthropic_messages_create(ant_kwargs)
             elif not _aux_available:
@@ -4714,7 +4723,8 @@ class AIAgent:
                     from agent.anthropic_adapter import build_anthropic_kwargs as _bak, normalize_anthropic_response as _nar
                     _ant_kw = _bak(model=self.model, messages=api_messages, tools=None,
                                    max_tokens=self.max_tokens, reasoning_config=self.reasoning_config,
-                                   is_oauth=getattr(self, '_is_anthropic_oauth', False))
+                                   is_oauth=getattr(self, '_is_anthropic_oauth', False),
+                                   preserve_dots=self._anthropic_preserve_dots())
                     summary_response = self._anthropic_messages_create(_ant_kw)
                     _msg, _ = _nar(summary_response, strip_tool_prefix=getattr(self, '_is_anthropic_oauth', False))
                     final_response = (_msg.content or "").strip()
@@ -4745,7 +4755,8 @@ class AIAgent:
                     from agent.anthropic_adapter import build_anthropic_kwargs as _bak2, normalize_anthropic_response as _nar2
                     _ant_kw2 = _bak2(model=self.model, messages=api_messages, tools=None,
                                     is_oauth=getattr(self, '_is_anthropic_oauth', False),
-                                     max_tokens=self.max_tokens, reasoning_config=self.reasoning_config)
+                                    max_tokens=self.max_tokens, reasoning_config=self.reasoning_config,
+                                    preserve_dots=self._anthropic_preserve_dots())
                     retry_response = self._anthropic_messages_create(_ant_kw2)
                     _retry_msg, _ = _nar2(retry_response, strip_tool_prefix=getattr(self, '_is_anthropic_oauth', False))
                     final_response = (_retry_msg.content or "").strip()
