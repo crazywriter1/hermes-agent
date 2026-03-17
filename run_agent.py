@@ -45,6 +45,11 @@ import fire
 from datetime import datetime
 from pathlib import Path
 
+# Preserve the last known tool surface for compatibility with interrupt and
+# Honcho-related state restoration paths. Defined early so it exists before
+# any transitive import can reference it (avoids NameError in tests).
+_saved_tool_names: set[str] = set()
+
 # Load .env from ~/.hermes/.env first, then project root as dev fallback.
 # User-managed env files should override stale shell exports on restart.
 from hermes_cli.env_loader import load_hermes_dotenv
@@ -105,10 +110,6 @@ HONCHO_TOOL_NAMES = {
     "honcho_search",
     "honcho_conclude",
 }
-
-# Preserve the last known tool surface for compatibility with interrupt and
-# Honcho-related state restoration paths.
-_saved_tool_names: set[str] = set()
 
 
 class _SafeWriter:
