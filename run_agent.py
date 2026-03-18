@@ -662,7 +662,6 @@ class AIAgent:
             _base = (base_url or "").lower()
             _is_alibaba_dashscope = (self.provider == "alibaba") or ("dashscope" in _base) or ("aliyuncs" in _base)
             effective_key = (api_key or "") if _is_alibaba_dashscope else (api_key or resolve_anthropic_token() or "")
-            effective_key = api_key or resolve_anthropic_token() or ""
             self.api_key = effective_key
             self._anthropic_api_key = effective_key
             self._anthropic_base_url = base_url

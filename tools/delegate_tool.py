@@ -173,6 +173,10 @@ def _build_child_agent(
     from run_agent import AIAgent
     import model_tools
 
+    # Save the parent's resolved tool names so _run_single_child can restore
+    # the process-global after the child runs (child may overwrite it).
+    _saved_tool_names = list(model_tools._last_resolved_tool_names)
+
     # When no explicit toolsets given, inherit from parent's enabled toolsets
     # so disabled tools (e.g. web) don't leak to subagents.
     if toolsets:
