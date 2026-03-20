@@ -40,9 +40,9 @@ class _FakeAgent:
         self._last_flushed_db_idx = 0
         self._todo_store = TodoStore()
 
-        # Flush memories and invalidate system prompt for the new session.
-        self.flush_memories(conversation_history)
-        self._invalidate_system_prompt()
+        # Do NOT call flush_memories() / _invalidate_system_prompt() here.
+        # HermesCLI.new_session() already triggers those calls on the real agent,
+        # and the tests assert they are invoked exactly once.
 
 
 def _make_cli(env_overrides=None, config_overrides=None, **kwargs):
