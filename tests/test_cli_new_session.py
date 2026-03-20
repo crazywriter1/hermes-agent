@@ -25,6 +25,25 @@ class _FakeAgent:
         self.flush_memories = MagicMock()
         self._invalidate_system_prompt = MagicMock()
 
+    def reset_session_state(self, conversation_history=None, **_kwargs):
+        """
+        Test double for agent session reset.
+
+        The CLI may delegate session clearing to agent.reset_session_state()
+        (depending on the implementation), so keep this method in sync with
+        what assertions expect.
+        """
+        if conversation_history is None:
+            conversation_history = []
+
+        # Reset DB flush index and clear todo store.
+        self._last_flushed_db_idx = 0
+        self._todo_store = TodoStore()
+
+        # Flush memories and invalidate system prompt for the new session.
+        self.flush_memories(conversation_history)
+        self._invalidate_system_prompt()
+
 
 def _make_cli(env_overrides=None, config_overrides=None, **kwargs):
     """Create a HermesCLI instance with minimal mocking."""
