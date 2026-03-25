@@ -4,7 +4,7 @@ import json
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from gateway.config import Platform, HomeChannel, GatewayConfig, PlatformConfig
+from gateway.config import Platform, HomeChannel, GatewayConfig, PlatformConfig, SessionResetPolicy
 from gateway.session import (
     SessionSource,
     SessionStore,
@@ -552,6 +552,76 @@ class TestWhatsAppDMSessionKeyConsistency:
         )
         key = build_session_key(source)
         assert key == "agent:main:telegram:group:-1002285219667:17585:42"
+
+
+class TestTranscriptCleanupOnReset:
+    """GH-3015: legacy JSONL/JSON under sessions_dir must not leak on session rotation."""
+
+    def test_reset_session_unlinks_jsonl_and_json(self, tmp_path):
+        from datetime import datetime
+        from gateway.session import SessionEntry
+
+        config = GatewayConfig()
+        with patch("gateway.session.SessionStore._ensure_loaded"):
+            store = SessionStore(sessions_dir=tmp_path, config=config)
+        store._loaded = True
+        store._db = MagicMock()
+
+        old_id = "20250101_120000_deadbeef"
+        entry = SessionEntry(
+            session_key="k1",
+            session_id=old_id,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+            platform=Platform.TELEGRAM,
+        )
+        store._entries = {"k1": entry}
+
+        (tmp_path / f"{old_id}.jsonl").write_text('{"role":"user","content":"x"}\n', encoding="utf-8")
+        (tmp_path / f"{old_id}.json").write_text("{}", encoding="utf-8")
+
+        new_entry = store.reset_session("k1")
+
+        assert new_entry is not None
+        assert new_entry.session_id != old_id
+        assert not (tmp_path / f"{old_id}.jsonl").exists()
+        assert not (tmp_path / f"{old_id}.json").exists()
+        store._db.end_session.assert_called_once_with(old_id, "session_reset")
+
+    def test_get_or_create_auto_reset_unlinks_jsonl(self, tmp_path):
+        from datetime import datetime, timedelta
+        from gateway.session import SessionEntry
+
+        config = GatewayConfig()
+        config.default_reset_policy = SessionResetPolicy(mode="idle", idle_minutes=1)
+        with patch("gateway.session.SessionStore._ensure_loaded"):
+            store = SessionStore(sessions_dir=tmp_path, config=config)
+        store._loaded = True
+        store._db = MagicMock()
+
+        source = SessionSource(platform=Platform.TELEGRAM, chat_id="99", chat_type="dm")
+        key = store._generate_session_key(source)
+        old_id = "20250101_130000_cafebabe"
+        now = datetime.now()
+        entry = SessionEntry(
+            session_key=key,
+            session_id=old_id,
+            created_at=now - timedelta(days=1),
+            updated_at=now - timedelta(minutes=10),
+            platform=Platform.TELEGRAM,
+            origin=source,
+            display_name="u",
+        )
+        store._entries = {key: entry}
+
+        (tmp_path / f"{old_id}.jsonl").write_text('{"role":"user","content":"y"}\n', encoding="utf-8")
+
+        new_entry = store.get_or_create_session(source)
+
+        assert new_entry.session_id != old_id
+        assert not (tmp_path / f"{old_id}.jsonl").exists()
+        store._db.end_session.assert_called_once_with(old_id, "session_reset")
+        store._db.create_session.assert_called_once()
 
 
 class TestSessionStoreEntriesAttribute:

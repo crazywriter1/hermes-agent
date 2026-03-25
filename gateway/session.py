@@ -678,6 +678,7 @@ class SessionStore:
                         self._db.end_session(entry.session_id, "session_reset")
                     except Exception as e:
                         logger.debug("Session DB operation failed: %s", e)
+                self._unlink_transcript_files(entry.session_id)
         else:
             was_auto_reset = False
             auto_reset_reason = None
@@ -788,7 +789,9 @@ class SessionStore:
                 self._db.end_session(old_entry.session_id, "session_reset")
             except Exception as e:
                 logger.debug("Session DB operation failed: %s", e)
-        
+
+        self._unlink_transcript_files(old_entry.session_id)
+
         now = datetime.now()
         session_id = f"{now.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
         
@@ -878,6 +881,21 @@ class SessionStore:
     def get_transcript_path(self, session_id: str) -> Path:
         """Get the path to a session's legacy transcript file."""
         return self.sessions_dir / f"{session_id}.jsonl"
+
+    def _unlink_transcript_files(self, session_id: str) -> None:
+        """Remove on-disk legacy transcript files for an abandoned session ID.
+
+        SQLite session rows (metadata + messages) are unchanged; this only drops
+        duplicate JSONL/JSON under ``sessions_dir`` when a session ID is
+        rotated away (manual reset, policy auto-reset).  See GH-3015.
+        """
+        for suffix in (".jsonl", ".json"):
+            path = self.sessions_dir / f"{session_id}{suffix}"
+            try:
+                if path.is_file():
+                    path.unlink()
+            except OSError as e:
+                logger.debug("Could not remove transcript file %s: %s", path, e)
     
     def append_to_transcript(self, session_id: str, message: Dict[str, Any], skip_db: bool = False) -> None:
         """Append a message to a session's transcript (SQLite + legacy JSONL).
