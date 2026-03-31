@@ -3195,6 +3195,64 @@ class HermesCLI:
         remaining = len(self.conversation_history)
         print(f"  {remaining} message(s) remaining in history.")
     
+    def _handle_model_command(self, cmd: str):
+        """Handle /model command — switch model/provider on the fly."""
+        parts = cmd.split(maxsplit=1)
+        if len(parts) < 2 or not parts[1].strip():
+            self._show_model_and_providers()
+            return
+
+        raw_input = parts[1].strip()
+
+        # Handle bare "custom" — auto-detect model from local endpoint
+        if raw_input.lower() == "custom":
+            from hermes_cli.model_switch import switch_to_custom_provider
+            result = switch_to_custom_provider()
+            if not result.success:
+                _cprint(f"  ❌ {result.error_message}")
+                return
+            self.model = result.model
+            self.provider = "custom"
+            self._explicit_base_url = result.base_url
+            self._explicit_api_key = result.api_key
+            self.agent = None
+            save_config_value("model.default", result.model)
+            save_config_value("model.provider", "custom")
+            _cprint(f"  ✅ Switched to {result.model} via custom endpoint")
+            _cprint(f"     {result.base_url}")
+            return
+
+        from hermes_cli.model_switch import switch_model
+        result = switch_model(
+            raw_input,
+            current_provider=self.provider,
+            current_base_url=getattr(self, '_explicit_base_url', ''),
+            current_api_key=getattr(self, '_explicit_api_key', ''),
+        )
+
+        if not result.success:
+            _cprint(f"  ❌ {result.error_message}")
+            return
+
+        self.model = result.new_model
+        if result.provider_changed:
+            self.provider = result.target_provider
+            self._explicit_api_key = result.api_key
+            self._explicit_base_url = result.base_url
+        self.agent = None  # Force re-init with new model
+
+        if result.persist:
+            save_config_value("model.default", result.new_model)
+            if result.provider_changed:
+                save_config_value("model.provider", result.target_provider)
+
+        msg = f"  ✅ Switched to {result.new_model}"
+        if result.provider_changed:
+            msg += f" via {result.provider_label}"
+        _cprint(msg)
+        if result.warning_message:
+            _cprint(f"  ⚠️  {result.warning_message}")
+
     def _show_model_and_providers(self):
         """Show current model + provider and list all authenticated providers.
 
@@ -3832,6 +3890,8 @@ class HermesCLI:
             self.new_session()
         elif canonical == "resume":
             self._handle_resume_command(cmd_original)
+        elif canonical == "model":
+            self._handle_model_command(cmd_original)
         elif canonical == "provider":
             self._show_model_and_providers()
         elif canonical == "prompt":
